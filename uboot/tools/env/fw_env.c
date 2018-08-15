@@ -8,10 +8,15 @@
  * SPDX-License-Identifier:	GPL-2.0+
  */
 
+#define _GNU_SOURCE
+
+#include <compiler.h>
 #include <errno.h>
 #include <env_flags.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <linux/stringify.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -31,11 +36,13 @@
 
 #include "fw_env.h"
 
-#include <aes.h>
+struct env_opts default_opts = {
+#ifdef CONFIG_FILE
+	.config_file = CONFIG_FILE
+#endif
+};
 
 #define DIV_ROUND_UP(n, d)	(((n) + (d) - 1) / (d))
-
-#define WHITESPACE(c) ((c == '\t') || (c == ' '))
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
@@ -45,7 +52,7 @@
 
 struct envdev_s {
 	const char *devname;		/* Device name */
-	ulong devoff;			/* Device offset */
+	long long devoff;		/* Device offset */
 	ulong env_size;			/* environment size */
 	ulong erase_size;		/* device erase size */
 	ulong env_sectors;		/* number of environment sectors */
@@ -71,7 +78,8 @@ static int dev_current;
 
 #define CUR_ENVSIZE ENVSIZE(dev_current)
 
-#define ENV_SIZE      getenvsize()
+static unsigned long usable_envsize;
+#define ENV_SIZE      usable_envsize
 
 struct env_image_single {
 	uint32_t	crc;	/* CRC32 over data bytes    */
@@ -102,10 +110,7 @@ static struct environment environment = {
 	.flag_scheme = FLAG_NONE,
 };
 
-/* Is AES encryption used? */
-static int aes_flag;
-static uint8_t aes_key[AES_KEY_LENGTH] = { 0 };
-static int env_aes_cbc_crypt(char *data, const int enc);
+static int env_aes_cbc_crypt(char *data, const int enc, uint8_t *key);
 
 static int HaveRedundEnv = 0;
 
@@ -117,42 +122,49 @@ static unsigned char obsolete_flag = 0;
 #include <env_default.h>
 
 static int flash_io (int mode);
-static char *envmatch (char * s1, char * s2);
-static int parse_config (void);
+static int parse_config(struct env_opts *opts);
 
 #if defined(CONFIG_FILE)
 static int get_config (char *);
 #endif
-static inline ulong getenvsize (void)
+
+static char *skip_chars(char *s)
 {
-	ulong rc = CUR_ENVSIZE - sizeof(long);
-
-	if (HaveRedundEnv)
-		rc -= sizeof (char);
-
-	if (aes_flag)
-		rc &= ~(AES_KEY_LENGTH - 1);
-
-	return rc;
+	for (; *s != '\0'; s++) {
+		if (isblank(*s))
+			return s;
+	}
+	return NULL;
 }
 
-static char *fw_string_blank(char *s, int noblank)
+static char *skip_blanks(char *s)
 {
-	int i;
-	int len = strlen(s);
-
-	for (i = 0; i < len; i++, s++) {
-		if ((noblank && !WHITESPACE(*s)) ||
-			(!noblank && WHITESPACE(*s)))
-			break;
+	for (; *s != '\0'; s++) {
+		if (!isblank(*s))
+			return s;
 	}
-	if (i == len)
-		return NULL;
-
-	return s;
+	return NULL;
 }
 
 /*
+ * s1 is either a simple 'name', or a 'name=value' pair.
+ * s2 is a 'name=value' pair.
+ * If the names match, return the value of s2, else NULL.
+ */
+static char *envmatch(char *s1, char *s2)
+{
+	if (s1 == NULL || s2 == NULL)
+		return NULL;
+
+	while (*s1 == *s2++)
+		if (*s1++ == '=')
+			return s2;
+	if (*s1 == '\0' && *(s2 - 1) == '=')
+		return s2;
+	return NULL;
+}
+
+/**
  * Search the environment for a variable.
  * Return the value, if found, or NULL, if not found.
  */
@@ -204,7 +216,7 @@ char *fw_getdefenv(char *name)
 	return NULL;
 }
 
-static int parse_aes_key(char *key)
+int parse_aes_key(char *key, uint8_t *bin_key)
 {
 	char tmp[5] = { '0', 'x', 0, 0, 0 };
 	unsigned long ul;
@@ -226,11 +238,9 @@ static int parse_aes_key(char *key)
 				"## Error: '-a' option requires valid AES key\n");
 			return -1;
 		}
-		aes_key[i] = ul & 0xff;
+		bin_key[i] = ul & 0xff;
 		key += 2;
 	}
-	aes_flag = 1;
-
 	return 0;
 }
 
@@ -238,29 +248,24 @@ static int parse_aes_key(char *key)
  * Print the current definition of one, or more, or all
  * environment variables
  */
-int fw_printenv (int argc, char *argv[])
+int fw_printenv(int argc, char *argv[], int value_only, struct env_opts *opts)
 {
-	char *env, *nxt;
-	int i, n_flag;
-	int rc = 0;
+	int i, rc = 0;
 
-	if (argc >= 2 && strcmp(argv[1], "-a") == 0) {
-		if (argc < 3) {
-			fprintf(stderr,
-				"## Error: '-a' option requires AES key\n");
-			return -1;
-		}
-		rc = parse_aes_key(argv[2]);
-		if (rc)
-			return rc;
-		argv += 2;
-		argc -= 2;
+	if (value_only && argc != 1) {
+		fprintf(stderr,
+			"## Error: `-n' option requires exactly one argument\n");
+		return -1;
 	}
 
-	if (fw_env_open())
+	if (!opts)
+		opts = &default_opts;
+
+	if (fw_env_open(opts))
 		return -1;
 
-	if (argc == 1) {		/* Print all env variables  */
+	if (argc == 0) {		/* Print all env variables  */
+		char *env, *nxt;
 		for (env = environment.data; *env; env = nxt + 1) {
 			for (nxt = env; *nxt; ++nxt) {
 				if (nxt >= &environment.data[ENV_SIZE]) {
@@ -275,56 +280,38 @@ int fw_printenv (int argc, char *argv[])
 		return 0;
 	}
 
-	if (strcmp (argv[1], "-n") == 0) {
-		n_flag = 1;
-		++argv;
-		--argc;
-		if (argc != 2) {
-			fprintf (stderr, "## Error: "
-				"`-n' option requires exactly one argument\n");
-			return -1;
-		}
-	} else {
-		n_flag = 0;
-	}
-
-	for (i = 1; i < argc; ++i) {	/* print single env variables   */
+	for (i = 0; i < argc; ++i) {	/* print a subset of env variables */
 		char *name = argv[i];
 		char *val = NULL;
 
-		for (env = environment.data; *env; env = nxt + 1) {
-
-			for (nxt = env; *nxt; ++nxt) {
-				if (nxt >= &environment.data[ENV_SIZE]) {
-					fprintf (stderr, "## Error: "
-						"environment not terminated\n");
-					return -1;
-				}
-			}
-			val = envmatch (name, env);
-			if (val) {
-				if (!n_flag) {
-					fputs (name, stdout);
-					putc ('=', stdout);
-				}
-				puts (val);
-				break;
-			}
-		}
+		val = fw_getenv(name);
 		if (!val) {
 			fprintf (stderr, "## Error: \"%s\" not defined\n", name);
 			rc = -1;
+			continue;
 		}
+
+		if (value_only) {
+			puts(val);
+			break;
+		}
+
+		printf("%s=%s\n", name, val);
 	}
 
 	return rc;
 }
 
-int fw_env_close(void)
+int fw_env_close(struct env_opts *opts)
 {
 	int ret;
-	if (aes_flag) {
-		ret = env_aes_cbc_crypt(environment.data, 1);
+
+	if (!opts)
+		opts = &default_opts;
+
+	if (opts->aes_flag) {
+		ret = env_aes_cbc_crypt(environment.data, 1,
+					opts->aes_key);
 		if (ret) {
 			fprintf(stderr,
 				"Error: can't encrypt env for flash\n");
@@ -477,49 +464,38 @@ int fw_env_write(char *name, char *value)
  *	    modified or deleted
  *
  */
-int fw_setenv(int argc, char *argv[])
+int fw_setenv(int argc, char *argv[], struct env_opts *opts)
 {
-	int i, rc;
+	int i;
 	size_t len;
-	char *name;
+	char *name, **valv;
 	char *value = NULL;
+	int valc;
 
-	if (argc < 2) {
+	if (!opts)
+		opts = &default_opts;
+
+	if (argc < 1) {
+		fprintf(stderr, "## Error: variable name missing\n");
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (strcmp(argv[1], "-a") == 0) {
-		if (argc < 3) {
-			fprintf(stderr,
-				"## Error: '-a' option requires AES key\n");
-			return -1;
-		}
-		rc = parse_aes_key(argv[2]);
-		if (rc)
-			return rc;
-		argv += 2;
-		argc -= 2;
-	}
-
-	if (argc < 2) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	if (fw_env_open()) {
+	if (fw_env_open(opts)) {
 		fprintf(stderr, "Error: environment not initialized\n");
 		return -1;
 	}
 
-	name = argv[1];
+	name = argv[0];
+	valv = argv + 1;
+	valc = argc - 1;
 
-	if (env_flags_validate_env_set_params(argc, argv) < 0)
-		return 1;
+	if (env_flags_validate_env_set_params(name, valv, valc) < 0)
+		return -1;
 
 	len = 0;
-	for (i = 2; i < argc; ++i) {
-		char *val = argv[i];
+	for (i = 0; i < valc; ++i) {
+		char *val = valv[i];
 		size_t val_len = strlen(val);
 
 		if (value)
@@ -541,7 +517,7 @@ int fw_setenv(int argc, char *argv[])
 
 	free(value);
 
-	return fw_env_close();
+	return fw_env_close(opts);
 }
 
 /*
@@ -561,7 +537,7 @@ int fw_setenv(int argc, char *argv[])
  * 0	  - OK
  * -1     - Error
  */
-int fw_parse_script(char *fname)
+int fw_parse_script(char *fname, struct env_opts *opts)
 {
 	FILE *fp;
 	char dump[1024];	/* Maximum line length in the file */
@@ -571,7 +547,10 @@ int fw_parse_script(char *fname)
 	int len;
 	int ret = 0;
 
-	if (fw_env_open()) {
+	if (!opts)
+		opts = &default_opts;
+
+	if (fw_env_open(opts)) {
 		fprintf(stderr, "Error: environment not initialized\n");
 		return -1;
 	}
@@ -604,31 +583,29 @@ int fw_parse_script(char *fname)
 		}
 
 		/* Drop ending line feed / carriage return */
-		while (len > 0 && (dump[len - 1] == '\n' ||
-				dump[len - 1] == '\r')) {
-			dump[len - 1] = '\0';
-			len--;
-		}
+		dump[--len] = '\0';
+		if (len && dump[len - 1] == '\r')
+			dump[--len] = '\0';
 
 		/* Skip comment or empty lines */
-		if ((len == 0) || dump[0] == '#')
+		if (len == 0 || dump[0] == '#')
 			continue;
 
 		/*
 		 * Search for variable's name,
 		 * remove leading whitespaces
 		 */
-		name = fw_string_blank(dump, 1);
+		name = skip_blanks(dump);
 		if (!name)
 			continue;
 
 		/* The first white space is the end of variable name */
-		val = fw_string_blank(name, 0);
+		val = skip_chars(name);
 		len = strlen(name);
 		if (val) {
 			*val++ = '\0';
 			if ((val - name) < len)
-				val = fw_string_blank(val, 1);
+				val = skip_blanks(val);
 			else
 				val = NULL;
 		}
@@ -661,10 +638,9 @@ int fw_parse_script(char *fname)
 	if (strcmp(fname, "-") != 0)
 		fclose(fp);
 
-	ret |= fw_env_close();
+	ret |= fw_env_close(opts);
 
 	return ret;
-
 }
 
 /*
@@ -685,8 +661,8 @@ static int flash_bad_block (int fd, uint8_t mtd_type, loff_t *blockstart)
 
 		if (badblock) {
 #ifdef DEBUG
-			fprintf (stderr, "Bad block at 0x%llx, "
-				 "skipping\n", *blockstart);
+			fprintf (stderr, "Bad block at 0x%llx, skipping\n",
+				(unsigned long long) *blockstart);
 #endif
 			return badblock;
 		}
@@ -773,7 +749,8 @@ static int flash_read_buf (int dev, int fd, void *buf, size_t count,
 		}
 #ifdef DEBUG
 		fprintf(stderr, "Read 0x%x bytes at 0x%llx on %s\n",
-			 rc, blockstart + block_seek, DEVNAME(dev));
+			rc, (unsigned long long) blockstart + block_seek,
+			DEVNAME(dev));
 #endif
 		processed += readlen;
 		readlen = min (blocklen, count - processed);
@@ -871,8 +848,9 @@ static int flash_write_buf (int dev, int fd, void *buf, size_t count,
 		if (block_seek + count != write_total) {
 			if (block_seek != 0)
 				fprintf(stderr, " and ");
-			fprintf(stderr, "0x%lx - 0x%x",
-				block_seek + count, write_total - 1);
+			fprintf(stderr, "0x%lx - 0x%lx",
+				(unsigned long) block_seek + count,
+				(unsigned long) write_total - 1);
 		}
 		fprintf(stderr, "\n");
 #endif
@@ -935,8 +913,9 @@ static int flash_write_buf (int dev, int fd, void *buf, size_t count,
 		}
 
 #ifdef DEBUG
-		fprintf(stderr, "Write 0x%x bytes at 0x%llx\n", erasesize,
-			blockstart);
+		fprintf(stderr, "Write 0x%llx bytes at 0x%llx\n",
+			(unsigned long long) erasesize,
+			(unsigned long long) blockstart);
 #endif
 		if (write (fd, data + processed, erasesize) != erasesize) {
 			fprintf (stderr, "Write error on %s: %s\n",
@@ -985,15 +964,15 @@ static int flash_flag_obsolete (int dev, int fd, off_t offset)
 }
 
 /* Encrypt or decrypt the environment before writing or reading it. */
-static int env_aes_cbc_crypt(char *payload, const int enc)
+static int env_aes_cbc_crypt(char *payload, const int enc, uint8_t *key)
 {
 	uint8_t *data = (uint8_t *)payload;
-	const int len = getenvsize();
+	const int len = usable_envsize;
 	uint8_t key_exp[AES_EXPAND_KEY_LENGTH];
 	uint32_t aes_blocks;
 
 	/* First we expand the key. */
-	aes_expand_key(aes_key, key_exp);
+	aes_expand_key(key, key_exp);
 
 	/* Calculate the number of AES blocks to encrypt. */
 	aes_blocks = DIV_ROUND_UP(len, AES_KEY_LENGTH);
@@ -1026,7 +1005,7 @@ static int flash_write (int fd_current, int fd_target, int dev_target)
 	}
 
 #ifdef DEBUG
-	fprintf(stderr, "Writing new environment at 0x%lx on %s\n",
+	fprintf(stderr, "Writing new environment at 0x%llx on %s\n",
 		DEVOFFSET (dev_target), DEVNAME (dev_target));
 #endif
 
@@ -1042,7 +1021,7 @@ static int flash_write (int fd_current, int fd_target, int dev_target)
 			offsetof (struct env_image_redundant, flags);
 #ifdef DEBUG
 		fprintf(stderr,
-			"Setting obsolete flag in environment at 0x%lx on %s\n",
+			"Setting obsolete flag in environment at 0x%llx on %s\n",
 			DEVOFFSET (dev_current), DEVNAME (dev_current));
 #endif
 		flash_flag_obsolete (dev_current, fd_current, offset);
@@ -1053,41 +1032,10 @@ static int flash_write (int fd_current, int fd_target, int dev_target)
 
 static int flash_read (int fd)
 {
-	struct mtd_info_user mtdinfo;
-	struct stat st;
 	int rc;
 
-	rc = fstat(fd, &st);
-	if (rc < 0) {
-		fprintf(stderr, "Cannot stat the file %s\n",
-			DEVNAME(dev_current));
-		return -1;
-	}
-
-	if (S_ISCHR(st.st_mode)) {
-		rc = ioctl(fd, MEMGETINFO, &mtdinfo);
-		if (rc < 0) {
-			fprintf(stderr, "Cannot get MTD information for %s\n",
-				DEVNAME(dev_current));
-			return -1;
-		}
-		if (mtdinfo.type != MTD_NORFLASH &&
-		    mtdinfo.type != MTD_NANDFLASH &&
-		    mtdinfo.type != MTD_DATAFLASH &&
-		    mtdinfo.type != MTD_UBIVOLUME) {
-			fprintf (stderr, "Unsupported flash type %u on %s\n",
-				 mtdinfo.type, DEVNAME(dev_current));
-			return -1;
-		}
-	} else {
-		memset(&mtdinfo, 0, sizeof(mtdinfo));
-		mtdinfo.type = MTD_ABSENT;
-	}
-
-	DEVTYPE(dev_current) = mtdinfo.type;
-
 	rc = flash_read_buf(dev_current, fd, environment.image, CUR_ENVSIZE,
-			     DEVOFFSET (dev_current), mtdinfo.type);
+			    DEVOFFSET(dev_current), DEVTYPE(dev_current));
 	if (rc != CUR_ENVSIZE)
 		return -1;
 
@@ -1153,28 +1101,9 @@ exit:
 }
 
 /*
- * s1 is either a simple 'name', or a 'name=value' pair.
- * s2 is a 'name=value' pair.
- * If the names match, return the value of s2, else NULL.
- */
-
-static char *envmatch (char * s1, char * s2)
-{
-	if (s1 == NULL || s2 == NULL)
-		return NULL;
-
-	while (*s1 == *s2++)
-		if (*s1++ == '=')
-			return s2;
-	if (*s1 == '\0' && *(s2 - 1) == '=')
-		return s2;
-	return NULL;
-}
-
-/*
  * Prevent confusion if running from erased flash memory
  */
-int fw_env_open(void)
+int fw_env_open(struct env_opts *opts)
 {
 	int crc0, crc0_ok;
 	unsigned char flag0;
@@ -1189,7 +1118,10 @@ int fw_env_open(void)
 	struct env_image_single *single;
 	struct env_image_redundant *redundant;
 
-	if (parse_config ())		/* should fill envdevices */
+	if (!opts)
+		opts = &default_opts;
+
+	if (parse_config(opts))		/* should fill envdevices */
 		return -1;
 
 	addr0 = calloc(1, CUR_ENVSIZE);
@@ -1221,8 +1153,9 @@ int fw_env_open(void)
 
 	crc0 = crc32 (0, (uint8_t *) environment.data, ENV_SIZE);
 
-	if (aes_flag) {
-		ret = env_aes_cbc_crypt(environment.data, 0);
+	if (opts->aes_flag) {
+		ret = env_aes_cbc_crypt(environment.data, 0,
+					opts->aes_key);
 		if (ret)
 			return ret;
 	}
@@ -1278,8 +1211,9 @@ int fw_env_open(void)
 
 		crc1 = crc32 (0, (uint8_t *) redundant->data, ENV_SIZE);
 
-		if (aes_flag) {
-			ret = env_aes_cbc_crypt(redundant->data, 0);
+		if (opts->aes_flag) {
+			ret = env_aes_cbc_crypt(redundant->data, 0,
+						opts->aes_key);
 			if (ret)
 				return ret;
 		}
@@ -1355,16 +1289,96 @@ int fw_env_open(void)
 	return 0;
 }
 
-
-static int parse_config ()
+static int check_device_config(int dev)
 {
 	struct stat st;
+	int fd, rc = 0;
+
+	if (DEVOFFSET(dev) % DEVESIZE(dev) != 0) {
+		fprintf(stderr, "Environment does not start on (erase) block boundary\n");
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (ENVSIZE(dev) > ENVSECTORS(dev) * DEVESIZE(dev)) {
+		fprintf(stderr, "Environment does not fit into available sectors\n");
+		errno = EINVAL;
+		return -1;
+	}
+
+	fd = open(DEVNAME(dev), O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr,
+			"Cannot open %s: %s\n",
+			DEVNAME(dev), strerror(errno));
+		return -1;
+	}
+
+	rc = fstat(fd, &st);
+	if (rc < 0) {
+		fprintf(stderr, "Cannot stat the file %s\n",
+			DEVNAME(dev));
+		goto err;
+	}
+
+	if (S_ISCHR(st.st_mode)) {
+		struct mtd_info_user mtdinfo;
+		rc = ioctl(fd, MEMGETINFO, &mtdinfo);
+		if (rc < 0) {
+			fprintf(stderr, "Cannot get MTD information for %s\n",
+				DEVNAME(dev));
+			goto err;
+		}
+		if (mtdinfo.type != MTD_NORFLASH &&
+		    mtdinfo.type != MTD_NANDFLASH &&
+		    mtdinfo.type != MTD_DATAFLASH &&
+		    mtdinfo.type != MTD_UBIVOLUME) {
+			fprintf(stderr, "Unsupported flash type %u on %s\n",
+				mtdinfo.type, DEVNAME(dev));
+			goto err;
+		}
+		DEVTYPE(dev) = mtdinfo.type;
+	} else {
+		uint64_t size;
+		DEVTYPE(dev) = MTD_ABSENT;
+
+		/*
+		 * Check for negative offsets, treat it as backwards offset
+		 * from the end of the block device
+		 */
+		if (DEVOFFSET(dev) < 0) {
+			rc = ioctl(fd, BLKGETSIZE64, &size);
+			if (rc < 0) {
+				fprintf(stderr, "Could not get block device size on %s\n",
+					DEVNAME(dev));
+				goto err;
+			}
+
+			DEVOFFSET(dev) = DEVOFFSET(dev) + size;
+#ifdef DEBUG
+			fprintf(stderr, "Calculated device offset 0x%llx on %s\n",
+				DEVOFFSET(dev), DEVNAME(dev));
+#endif
+		}
+	}
+
+err:
+	close(fd);
+	return rc;
+}
+
+static int parse_config(struct env_opts *opts)
+{
+	int rc;
+
+	if (!opts)
+		opts = &default_opts;
 
 #if defined(CONFIG_FILE)
 	/* Fills in DEVNAME(), ENVSIZE(), DEVESIZE(). Or don't. */
-	if (get_config (CONFIG_FILE)) {
-		fprintf (stderr,
-			"Cannot parse config file: %s\n", strerror (errno));
+	if (get_config(opts->config_file)) {
+		fprintf(stderr, "Cannot parse config file '%s': %m\n",
+			opts->config_file);
 		return -1;
 	}
 #else
@@ -1399,19 +1413,29 @@ static int parse_config ()
 	HaveRedundEnv = 1;
 #endif
 #endif
-	if (stat (DEVNAME (0), &st)) {
-		fprintf (stderr,
-			"Cannot access MTD device %s: %s\n",
-			DEVNAME (0), strerror (errno));
-		return -1;
+	rc = check_device_config(0);
+	if (rc < 0)
+		return rc;
+
+	if (HaveRedundEnv) {
+		rc = check_device_config(1);
+		if (rc < 0)
+			return rc;
+
+		if (ENVSIZE(0) != ENVSIZE(1)) {
+			fprintf(stderr,
+				"Redundant environments have unequal size");
+			return -1;
+		}
 	}
 
-	if (HaveRedundEnv && stat (DEVNAME (1), &st)) {
-		fprintf (stderr,
-			"Cannot access MTD device %s: %s\n",
-			DEVNAME (1), strerror (errno));
-		return -1;
-	}
+	usable_envsize = CUR_ENVSIZE - sizeof(uint32_t);
+	if (HaveRedundEnv)
+		usable_envsize -= sizeof(char);
+
+	if (opts->aes_flag)
+		usable_envsize &= ~(AES_KEY_LENGTH - 1);
+
 	return 0;
 }
 
@@ -1433,12 +1457,12 @@ static int get_config (char *fname)
 		if (dump[0] == '#')
 			continue;
 
-		rc = sscanf (dump, "%ms %lx %lx %lx %lx",
-			     &devname,
-			     &DEVOFFSET (i),
-			     &ENVSIZE (i),
-			     &DEVESIZE (i),
-			     &ENVSECTORS (i));
+		rc = sscanf(dump, "%ms %lli %lx %lx %lx",
+			    &devname,
+			    &DEVOFFSET(i),
+			    &ENVSIZE(i),
+			    &DEVESIZE(i),
+			    &ENVSECTORS(i));
 
 		if (rc < 3)
 			continue;

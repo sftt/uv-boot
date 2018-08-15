@@ -34,6 +34,8 @@
 #define CONFIG_HOSTNAME			km_kirkwood_pci
 #define CONFIG_KM_IVM_BUS		1	/* I2C2 (Mux-Port 1)*/
 #define CONFIG_KM_FPGA_CONFIG
+#define CONFIG_KM_UBI_PART_BOOT_OPTS		",2048"
+#define CONFIG_SYS_NAND_NO_SUBPAGE_WRITE
 
 /* KM_KIRKWOOD_128M16 */
 #elif defined(CONFIG_KM_KIRKWOOD_128M16)
@@ -105,17 +107,14 @@
 #define CONFIG_SYS_KWD_CONFIG $(CONFIG_BOARDDIR)/kwbimage_128M16_1.cfg
 #define CONFIG_KM_ENV_IS_IN_SPI_NOR
 #define CONFIG_KM_FPGA_CONFIG
-
+#define CONFIG_KM_UBI_PART_BOOT_OPTS		",2048"
+#define CONFIG_SYS_NAND_NO_SUBPAGE_WRITE
 #else
 #error ("Board unsupported")
 #endif
 
 /* include common defines/options for all arm based Keymile boards */
 #include "km/km_arm.h"
-
-#ifndef CONFIG_KM_ENV_IS_IN_SPI_NOR
-#define KM_ENV_BUS	5	/* I2C2 (Mux-Port 5)*/
-#endif
 
 #if defined(CONFIG_KM_PIGGY4_88E6352)
 /*
@@ -180,6 +179,5 @@
 #ifdef CONFIG_KM_DISABLE_PCI
 #undef  CONFIG_KIRKWOOD_PCIE_INIT
 #endif
-
 
 #endif /* _CONFIG_KM_KIRKWOOD */

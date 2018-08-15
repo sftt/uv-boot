@@ -18,6 +18,7 @@
 #include <asm/arch/cpu.h>
 #include <asm/arch/clock.h>
 #include <power/tps65910.h>
+#include <linux/compiler.h>
 
 struct ctrl_stat *cstat = (struct ctrl_stat *)CTRL_BASE;
 
@@ -47,15 +48,6 @@ u32 get_cpu_type(void)
 	partnum = (id >> 12) & 0xffff;
 
 	return partnum;
-}
-
-/**
- * get_board_rev() - setup to pass kernel board revision information
- * returns:(bit[0-3] sub version, higher bit[7-4] is higher version)
- */
-u32 get_board_rev(void)
-{
-	return BOARD_REV_ID;
 }
 
 /**

@@ -14,6 +14,7 @@
 
 #define CONFIG_MPC5200
 #define CONFIG_A3M071			/* A3M071 board */
+#define CONFIG_DISPLAY_BOARDINFO
 
 #define	CONFIG_SYS_TEXT_BASE	0x01000000	/* boot low for 32 MiB boards */
 
@@ -43,13 +44,8 @@
 /*
  * Command line configuration.
  */
-#include <config_cmd_default.h>
-
 #define CONFIG_CMD_BSP
-#define CONFIG_CMD_CACHE
-#define CONFIG_CMD_MII
 #define CONFIG_CMD_REGINFO
-#define CONFIG_CMD_DHCP
 #define CONFIG_BOOTP_SEND_HOSTNAME
 #define CONFIG_BOOTP_SERVERIP
 #define CONFIG_BOOTP_MAY_FAIL
@@ -57,11 +53,8 @@
 #define CONFIG_BOOTP_GATEWAY
 #define CONFIG_BOOTP_SERVERIP
 #define CONFIG_NET_RETRY_COUNT 3
-#define CONFIG_CMD_LINK_LOCAL
-#define CONFIG_LIB_RAND
 #define CONFIG_NETCONSOLE
 #define CONFIG_SYS_CONSOLE_IS_IN_ENV
-#define CONFIG_CMD_PING
 #define CONFIG_MTD_DEVICE	/* needed for mtdparts commands */
 #define CONFIG_MTD_PARTITIONS	/* needed for UBI */
 #define CONFIG_FLASH_CFI_MTD
@@ -84,7 +77,6 @@
 #define CONFIG_CMD_MTDPARTS
 #define CONFIG_CMD_UBI
 #define CONFIG_CMD_UBIFS
-#define CONFIG_FIT
 
 /*
  * IPB Bus clocking configuration.
@@ -96,10 +88,6 @@
 #else
 #undef CONFIG_SYS_PCICLK_EQUALS_IPBCLK_DIV2
 #endif
-
-/* pass open firmware flat tree */
-#define CONFIG_OF_LIBFDT
-#define CONFIG_OF_BOARD_SETUP
 
 /* maximum size of the flat tree (8K) */
 #define OF_FLAT_TREE_MAX_SIZE	8192
@@ -148,9 +136,9 @@
 
 /* Use SRAM until RAM will be available */
 #define CONFIG_SYS_INIT_RAM_ADDR	MPC5XXX_SRAM
-#define CONFIG_SYS_INIT_RAM_END		MPC5XXX_SRAM_SIZE
+#define CONFIG_SYS_INIT_RAM_SIZE	MPC5XXX_SRAM_SIZE
 
-#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_END - \
+#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_SIZE - \
 					 GENERATED_GBL_DATA_SIZE)
 #define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
 
@@ -240,15 +228,12 @@
  *                                                        +- 31    0 PSC1
  */
 
-
 /*
  * Miscellaneous configurable options
  */
 #define CONFIG_SYS_LONGHELP
 
 #define CONFIG_CMDLINE_EDITING
-#define	CONFIG_SYS_HUSH_PARSER
-#define	CONFIG_SYS_PROMPT_HUSH_PS2	"> "
 
 #if defined(CONFIG_CMD_KGDB)
 #define CONFIG_SYS_CBSIZE		1024
@@ -264,7 +249,6 @@
 
 #define CONFIG_SYS_LOAD_ADDR		0x00100000
 
-#define CONFIG_LOOPW
 #define CONFIG_SYS_CONSOLE_INFO_QUIET	/* don't print console @ startup*/
 
 /*
@@ -337,9 +321,7 @@
  * Environment Configuration
  */
 
-#define CONFIG_BOOTDELAY	3	/* -1 disables auto-boot */
 #undef  CONFIG_BOOTARGS
-#define CONFIG_ZERO_BOOTDELAY_CHECK
 
 #define CONFIG_SYS_AUTOLOAD	"n"
 
@@ -352,6 +334,7 @@
 
 #define CONFIG_SYS_OS_BASE	0xfc200000
 #define CONFIG_SYS_FDT_BASE	0xfc1e0000
+#define CONFIG_SYS_FDT_SIZE	(16<<10)
 
 #define	CONFIG_EXTRA_ENV_SETTINGS					\
 	"netdev=eth0\0"							\
@@ -412,13 +395,10 @@
 /*
  * SPL related defines
  */
-#define CONFIG_SPL
 #define CONFIG_SPL_FRAMEWORK
 #define CONFIG_SPL_BOARD_INIT
 #define CONFIG_SPL_NOR_SUPPORT
 #define CONFIG_SPL_TEXT_BASE	0xfc000000
-#define	CONFIG_SPL_START_S_PATH	"arch/powerpc/cpu/mpc5xxx"
-#define CONFIG_SPL_LDSCRIPT	"arch/powerpc/cpu/mpc5xxx/u-boot-spl.lds"
 #define CONFIG_SPL_LIBCOMMON_SUPPORT	/* image.c */
 #define CONFIG_SPL_LIBGENERIC_SUPPORT	/* string.c */
 #define CONFIG_SPL_SERIAL_SUPPORT

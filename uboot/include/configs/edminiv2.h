@@ -13,6 +13,28 @@
 #define _CONFIG_EDMINIV2_H
 
 /*
+ * SPL
+ */
+
+#define CONFIG_SPL_FRAMEWORK
+#define CONFIG_SPL_LIBGENERIC_SUPPORT
+#define CONFIG_SPL_LIBCOMMON_SUPPORT
+#define CONFIG_SPL_SERIAL_SUPPORT
+#define CONFIG_SPL_NOR_SUPPORT
+#define CONFIG_SPL_TEXT_BASE		0xffff0000
+#define CONFIG_SPL_MAX_SIZE		0x0000fff0
+#define CONFIG_SPL_STACK		0x00020000
+#define CONFIG_SPL_BSS_START_ADDR	0x00020000
+#define CONFIG_SPL_BSS_MAX_SIZE		0x0001ffff
+#define CONFIG_SYS_SPL_MALLOC_START	0x00040000
+#define CONFIG_SYS_SPL_MALLOC_SIZE	0x0001ffff
+#define CONFIG_SPL_LDSCRIPT            "$(CPUDIR)/orion5x/u-boot-spl.lds"
+#define CONFIG_SPL_BOARD_INIT
+#define CONFIG_SYS_UBOOT_BASE		0xfff90000
+#define CONFIG_SYS_UBOOT_START		0x00800000
+#define CONFIG_SYS_TEXT_BASE 		0x00800000
+
+/*
  * Version number information
  */
 
@@ -23,9 +45,7 @@
  */
 
 #define CONFIG_MARVELL		1
-#define CONFIG_ARM926EJS	1	/* Basic Architecture */
 #define CONFIG_FEROCEON		1	/* CPU Core subversion */
-#define CONFIG_ORION5X		1	/* SOC Family Name */
 #define CONFIG_88F5182		1	/* SOC Name */
 #define CONFIG_MACH_EDMINIV2	1	/* Machine type */
 
@@ -68,7 +88,6 @@
  * NS16550 Configuration
  */
 
-#define CONFIG_SYS_NS16550
 #define CONFIG_SYS_NS16550_SERIAL
 #define CONFIG_SYS_NS16550_REG_SIZE	(-4)
 #define CONFIG_SYS_NS16550_CLK		CONFIG_SYS_TCLK
@@ -91,16 +110,11 @@
 
 #define CONFIG_SYS_FLASH_CFI
 #define CONFIG_FLASH_CFI_DRIVER
-#define CONFIG_FLASH_CFI_LEGACY
 #define CONFIG_SYS_MAX_FLASH_BANKS	1  /* max num of flash banks       */
 #define CONFIG_SYS_MAX_FLASH_SECT	11 /* max num of sects on one chip */
 #define CONFIG_SYS_FLASH_BASE		0xfff80000
-#define CONFIG_SYS_FLASH_SECTSZ \
-	{16384, 8192, 8192, 32768, \
-	 65536, 65536, 65536, 65536, 65536, 65536, 65536}
 
 /* auto boot */
-#define CONFIG_BOOTDELAY	3	/* default enable autoboot */
 
 /*
  * For booting Linux, the board info and command line data
@@ -111,17 +125,13 @@
 #define CONFIG_INITRD_TAG	1	/* enable INITRD tag */
 #define CONFIG_SETUP_MEMORY_TAGS 1	/* enable memory tag */
 
-#define	CONFIG_SYS_PROMPT	"EDMiniV2> "	/* Command Prompt */
 #define	CONFIG_SYS_CBSIZE	1024	/* Console I/O Buff Size */
 #define	CONFIG_SYS_PBSIZE	(CONFIG_SYS_CBSIZE \
 		+sizeof(CONFIG_SYS_PROMPT) + 16)	/* Print Buff */
 /*
- * Commands configuration - using default command set for now
+ * Commands configuration
  */
-#include <config_cmd_default.h>
 #define CONFIG_CMD_IDE
-#define CONFIG_CMD_I2C
-#define CONFIG_CMD_USB
 
 /*
  * Network
@@ -146,7 +156,6 @@
 #define __io
 #define CONFIG_IDE_PREINIT
 #define CONFIG_DOS_PARTITION
-#define CONFIG_CMD_EXT2
 /* ED Mini V has an IDE-compatible SATA connector for port 1 */
 #define CONFIG_MVSATA_IDE
 #define CONFIG_MVSATA_IDE_USE_PORT1
@@ -177,7 +186,6 @@
 #define CONFIG_USB_EHCI		/* Enable EHCI USB support */
 #define CONFIG_USB_EHCI_MARVELL
 #define ORION5X_USB20_HOST_PORT_BASE ORION5X_USB20_PORT0_BASE
-#define CONFIG_USB_STORAGE
 #define CONFIG_DOS_PARTITION
 #define CONFIG_ISO_PARTITION
 #define CONFIG_SUPPORT_VFAT
@@ -187,8 +195,9 @@
  * I2C related stuff
  */
 #ifdef CONFIG_CMD_I2C
-#define CONFIG_I2C_MVTWSI
-#define CONFIG_I2C_MVTWSI_BASE		ORION5X_TWSI_BASE
+#define CONFIG_SYS_I2C
+#define CONFIG_SYS_I2C_MVTWSI
+#define CONFIG_I2C_MVTWSI_BASE0		ORION5X_TWSI_BASE
 #define CONFIG_SYS_I2C_SLAVE		0x0
 #define CONFIG_SYS_I2C_SPEED		100000
 #endif
@@ -220,9 +229,6 @@
 #define CONFIG_SYS_MEMTEST_END		0x007fffff
 #define CONFIG_SYS_RESET_ADDRESS	0xffff0000
 #define CONFIG_SYS_MAXARGS		16
-
-/* Use the HUSH parser */
-#define CONFIG_SYS_HUSH_PARSER
 
 /* Enable command line editing */
 #define CONFIG_CMDLINE_EDITING

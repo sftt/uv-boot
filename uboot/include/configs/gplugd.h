@@ -52,23 +52,15 @@
  * Commands configuration
  */
 #define CONFIG_SYS_NO_FLASH		/* Declare no flash (NOR/SPI) */
-#include <config_cmd_default.h>
-#define CONFIG_CMD_I2C
-#undef CONFIG_CMD_FPGA
-#define CONFIG_CMD_USB
-#define CONFIG_CMD_EXT2
-#define CONFIG_CMD_FAT
 
 /* Disable DCACHE */
 #define CONFIG_SYS_DCACHE_OFF
 
 /* Network configuration */
 #ifdef CONFIG_CMD_NET
-#define CONFIG_CMD_PING
 #define CONFIG_ARMADA100_FEC
 
 /* DHCP Support */
-#define CONFIG_CMD_DHCP
 #define CONFIG_BOOTP_DHCP_REQUEST_DELAY		50000
 #endif /* CONFIG_CMD_NET */
 
@@ -77,7 +69,6 @@
 
 /* PHY configuration */
 #define CONFIG_MII
-#define CONFIG_CMD_MII
 #define CONFIG_RESET_PHY_R
 /* 88E3015 register definition */
 #define PHY_LED_PAR_SEL_REG		22
@@ -92,8 +83,6 @@
 #define CONFIG_SYS_SSP_PORT		2
 
 /* Flash Support */
-#define CONFIG_CMD_SF
-#define CONFIG_SPI_FLASH_ATMEL
 
 /*
  * mv-common.h should be defined after CMD configs since it used them
@@ -116,15 +105,10 @@
 #define CONFIG_ENV_SIZE			0x4000
 #define CONFIG_ENV_OFFSET		0x07C000
 
-#define CONFIG_CMD_ASKENV
-#define CONFIG_CMD_EDITENV
-#define CONFIG_CMD_SAVEENV
-
 #ifdef CONFIG_CMD_USB
 #define CONFIG_USB_EHCI
 #define CONFIG_USB_EHCI_ARMADA100
 #define CONFIG_EHCI_IS_TDI
-#define CONFIG_USB_STORAGE
 #endif /* CONFIG_CMD_USB */
 
 #define CONFIG_DOS_PARTITION

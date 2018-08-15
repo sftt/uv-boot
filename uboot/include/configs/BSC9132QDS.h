@@ -11,6 +11,8 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
+#define CONFIG_DISPLAY_BOARDINFO
+
 #ifdef CONFIG_BSC9132QDS
 #define CONFIG_BSC9132
 #endif
@@ -41,7 +43,6 @@
 #endif
 
 #ifdef CONFIG_NAND
-#define CONFIG_SPL
 #define CONFIG_SPL_INIT_MINIMAL
 #define CONFIG_SPL_SERIAL_SUPPORT
 #define CONFIG_SPL_NAND_SUPPORT
@@ -79,20 +80,18 @@
 #define CONFIG_BOOKE			/* BOOKE */
 #define CONFIG_E500			/* BOOKE e500 family */
 #define CONFIG_FSL_IFC			/* Enable IFC Support */
+#define CONFIG_FSL_CAAM			/* Enable SEC/CAAM */
 #define CONFIG_SYS_HAS_SERDES		/* common SERDES init code */
 
 #define CONFIG_PCI			/* Enable PCI/PCIE */
 #if defined(CONFIG_PCI)
-#define CONFIG_PCIE1			/* PCIE controler 1 (slot 1) */
+#define CONFIG_PCIE1			/* PCIE controller 1 (slot 1) */
 #define CONFIG_FSL_PCI_INIT		/* Use common FSL init code */
 #define CONFIG_PCI_INDIRECT_BRIDGE	/* indirect PCI bridge support */
 #define CONFIG_FSL_PCIE_RESET		/* need PCIe reset errata */
 #define CONFIG_SYS_PCI_64BIT		/* enable 64-bit PCI resources */
 
-#define CONFIG_CMD_NET
 #define CONFIG_CMD_PCI
-
-#define CONFIG_E1000			/*  E1000 pci Ethernet card*/
 
 /*
  * PCI Windows
@@ -223,7 +222,6 @@ combinations. this should be removed later
 #define CONFIG_SYS_DDR_TIMING_5	CONFIG_SYS_DDR_TIMING_5_800
 #endif
 
-
 /* relocated CCSRBAR */
 #define CONFIG_SYS_CCSRBAR	CONFIG_SYS_CCSRBAR_DEFAULT
 #define CONFIG_SYS_CCSRBAR_PHYS_LOW	CONFIG_SYS_CCSRBAR_DEFAULT
@@ -317,7 +315,6 @@ combinations. this should be removed later
 /* NAND */
 #define CONFIG_SYS_NAND_BASE_LIST	{ CONFIG_SYS_NAND_BASE }
 #define CONFIG_SYS_MAX_NAND_DEVICE	1
-#define CONFIG_MTD_NAND_VERIFY_WRITE
 #define CONFIG_CMD_NAND
 
 #define CONFIG_SYS_NAND_BLOCK_SIZE	(128 * 1024)
@@ -354,7 +351,7 @@ combinations. this should be removed later
 #define CONFIG_SYS_CS2_FTIM1		(FTIM1_GPCM_TACO(0x0e) | \
 					FTIM1_GPCM_TRAD(0x1f))
 #define CONFIG_SYS_CS2_FTIM2		(FTIM2_GPCM_TCS(0x0e) | \
-					FTIM2_GPCM_TCH(0x0) | \
+					FTIM2_GPCM_TCH(0x8) | \
 					FTIM2_GPCM_TWP(0x1f))
 #define CONFIG_SYS_CS2_FTIM3		0x0
 #endif
@@ -397,9 +394,9 @@ combinations. this should be removed later
 
 #define CONFIG_SYS_INIT_RAM_LOCK
 #define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000	/* stack in RAM */
-#define CONFIG_SYS_INIT_RAM_END		0x00004000 /* End of used area in RAM */
+#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000 /* End of used area in RAM */
 
-#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_END \
+#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_SIZE \
 						- GENERATED_GBL_DATA_SIZE)
 #define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
 
@@ -409,7 +406,6 @@ combinations. this should be removed later
 /* Serial Port */
 #define CONFIG_CONS_INDEX	1
 #undef	CONFIG_SERIAL_SOFTWARE_FIFO
-#define CONFIG_SYS_NS16550
 #define CONFIG_SYS_NS16550_SERIAL
 #define CONFIG_SYS_NS16550_REG_SIZE	1
 #define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
@@ -417,7 +413,6 @@ combinations. this should be removed later
 #define CONFIG_NS16550_MIN_FUNCTIONS
 #endif
 
-#define CONFIG_SERIAL_MULTI	1 /* Enable both serial ports */
 #define CONFIG_SYS_CONSOLE_IS_IN_ENV	/* determine from environment */
 
 #define CONFIG_SYS_BAUDRATE_TABLE	\
@@ -427,23 +422,6 @@ combinations. this should be removed later
 #define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR + 0x4600)
 #define CONFIG_SYS_NS16550_COM3	(CONFIG_SYS_CCSRBAR + 0x4700)
 #define CONFIG_SYS_NS16550_COM4	(CONFIG_SYS_CCSRBAR + 0x4800)
-
-/* Use the HUSH parser */
-#define CONFIG_SYS_HUSH_PARSER    /* hush parser */
-#ifdef	CONFIG_SYS_HUSH_PARSER
-#define CONFIG_SYS_PROMPT_HUSH_PS2 "> "
-#endif
-
-/*
- * Pass open firmware flat tree
- */
-#define CONFIG_OF_LIBFDT
-#define CONFIG_OF_BOARD_SETUP
-#define CONFIG_OF_STDOUT_VIA_ALIAS
-
-/* new uImage format support */
-#define CONFIG_FIT
-#define CONFIG_FIT_VERBOSE	/* enable fit_format_{error,warning}() */
 
 #define CONFIG_SYS_I2C
 #define CONFIG_SYS_I2C_FSL
@@ -465,7 +443,6 @@ combinations. this should be removed later
 
 /* enable read and write access to EEPROM */
 #define CONFIG_CMD_EEPROM
-#define CONFIG_SYS_I2C_MULTI_EEPROMS
 #define CONFIG_SYS_I2C_EEPROM_ADDR_LEN 1
 #define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS 3
 #define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS 5
@@ -482,11 +459,7 @@ combinations. this should be removed later
  * used for SLIC
  */
 /* eSPI - Enhanced SPI */
-#define CONFIG_FSL_ESPI  /* SPI */
 #ifdef CONFIG_FSL_ESPI
-#define CONFIG_SPI_FLASH
-#define CONFIG_SPI_FLASH_SPANSION
-#define CONFIG_CMD_SF
 #define CONFIG_SF_DEFAULT_SPEED		10000000
 #define CONFIG_SF_DEFAULT_MODE		SPI_MODE_0
 #endif
@@ -525,7 +498,6 @@ combinations. this should be removed later
 
 #define CONFIG_MMC
 #ifdef CONFIG_MMC
-#define CONFIG_CMD_MMC
 #define CONFIG_DOS_PARTITION
 #define CONFIG_FSL_ESDHC
 #define CONFIG_GENERIC_MMC
@@ -534,10 +506,8 @@ combinations. this should be removed later
 
 #define CONFIG_USB_EHCI  /* USB */
 #ifdef CONFIG_USB_EHCI
-#define CONFIG_CMD_USB
 #define CONFIG_EHCI_HCD_INIT_AFTER_RESET
 #define CONFIG_USB_EHCI_FSL
-#define CONFIG_USB_STORAGE
 #define CONFIG_HAS_FSL_DR_USB
 #endif
 
@@ -580,23 +550,19 @@ combinations. this should be removed later
 /*
  * Command line configuration.
  */
-#include <config_cmd_default.h>
-
 #define CONFIG_CMD_DATE
-#define CONFIG_CMD_DHCP
-#define CONFIG_CMD_ELF
 #define CONFIG_CMD_ERRATA
-#define CONFIG_CMD_I2C
 #define CONFIG_CMD_IRQ
-#define CONFIG_CMD_MII
-#define CONFIG_CMD_PING
-#define CONFIG_CMD_SETEXPR
 #define CONFIG_CMD_REGINFO
 
 #if defined(CONFIG_MMC) || defined(CONFIG_USB_EHCI)
-#define CONFIG_CMD_EXT2
-#define CONFIG_CMD_FAT
 #define CONFIG_DOS_PARTITION
+#endif
+
+/* Hash command with SHA acceleration supported in hardware */
+#ifdef CONFIG_FSL_CAAM
+#define CONFIG_CMD_HASH
+#define CONFIG_SHA_HW_ACCEL
 #endif
 
 /*
@@ -617,7 +583,6 @@ combinations. this should be removed later
 #define CONFIG_SYS_MAXARGS	16		/* max number of command args */
 #define CONFIG_SYS_BARGSIZE	CONFIG_SYS_CBSIZE/* Boot Argument Buffer Size */
 
-
 /*
  * For booting Linux, the board info and command line data
  * have to be in the first 64 MB of memory, since this is
@@ -628,6 +593,27 @@ combinations. this should be removed later
 
 #if defined(CONFIG_CMD_KGDB)
 #define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
+#endif
+
+/*
+ * Dynamic MTD Partition support with mtdparts
+ */
+#ifndef CONFIG_SYS_NO_FLASH
+#define CONFIG_MTD_DEVICE
+#define CONFIG_MTD_PARTITIONS
+#define CONFIG_CMD_MTDPARTS
+#define CONFIG_FLASH_CFI_MTD
+#define MTDIDS_DEFAULT "nor0=88000000.nor,nand0=ff800000.flash,"
+#define MTDPARTS_DEFAULT "mtdparts=88000000.nor:256k(dtb),7m(kernel)," \
+			"55m(fs),1m(uboot);ff800000.flash:1m(uboot)," \
+			"8m(kernel),512k(dtb),-(fs)"
+#endif
+/*
+ * Override partitions in device tree using info
+ * in "mtdparts" environment variable
+ */
+#ifdef CONFIG_CMD_MTDPARTS
+#define CONFIG_FDT_FIXUP_PARTITIONS
 #endif
 
 /*
@@ -660,7 +646,7 @@ combinations. this should be removed later
 	"consoledev=ttyS0\0"				\
 	"ramdiskaddr=2000000\0"			\
 	"ramdiskfile=rootfs.ext2.gz.uboot\0"		\
-	"fdtaddr=c00000\0"				\
+	"fdtaddr=1e00000\0"				\
 	"fdtfile=bsc9132qds.dtb\0"		\
 	"bdev=sda1\0"	\
 	CONFIG_DEF_HWCONFIG\
